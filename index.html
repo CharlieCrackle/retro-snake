@@ -1,0 +1,610 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Retro Snake</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  :root { --border: #8FE3E8; --screen: #FFFFFF; --ink: #3A33C8; --red: #B53A2E; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--border); }
+  body { font-family: 'Press Start 2P', monospace; color: var(--ink); display: flex; justify-content: center; padding: 40px 16px; }
+  .screen { background: var(--screen); padding: 24px; width: 100%; max-width: 880px; display: flex; flex-direction: column; gap: 16px; }
+  .boot { font-size: 12px; line-height: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .boot .c { text-align: center; }
+  .row { display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start; }
+  .board { position: relative; border: 4px solid var(--ink); width: 408px; max-width: 100%; aspect-ratio: 1; }
+  canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+  .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.7); }
+  .overlay[hidden] { display: none; }
+  .box { background: #fff; border: 4px solid var(--ink); padding: 24px; width: 300px; max-width: 90%; display: flex; flex-direction: column; gap: 16px; font-size: 12px; line-height: 16px; }
+  .box .t { font-size: 20px; line-height: 24px; }
+  button { font-family: inherit; font-size: 12px; border: none; border-radius: 0; background: var(--ink); color: #fff; cursor: pointer; min-height: 44px; padding: 0 16px; }
+  .panel { flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 20px; font-size: 12px; line-height: 16px; }
+  h1 { margin: 0; align-self: flex-start; padding: 8px 12px; background: var(--ink); color: #fff; font-weight: 400; font-size: 24px; line-height: 32px; }
+  .stats { white-space: pre; display: flex; flex-direction: column; gap: 8px; }
+  .stats span { color: var(--red); }
+  .radar { display: flex; flex-direction: column; gap: 8px; font-size: 10px; }
+  .radar canvas { width: 120px; height: 120px; border: 4px solid var(--ink); background: #000; }
+  /* ---- Drawn 1981-style home computer (beige wedge, brown keys) ---- */
+  .computer { margin-top: 8px; }
+  .case { position: relative; background: linear-gradient(#F1E7CF, #E4D7B7 60%, #D9CBA8); border-radius: 22px 22px 10px 10px;
+          padding: 0 28px 34px; border: 3px solid #CDBE98;
+          box-shadow: inset 0 4px 0 #FBF5E6, inset 0 -6px 0 #CFC09B, 0 14px 0 #B8A77F, 0 18px 0 #9E8E68, 0 26px 30px rgba(0,0,0,.25); }
+  .ridge { margin: 0 -28px 18px; height: 34px; border-radius: 19px 19px 0 0; background: linear-gradient(#E9DEC2, #D6C8A4);
+           border-bottom: 3px solid #C2B28B; display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 0 28px; }
+  .ridge i { width: 34px; height: 6px; border-radius: 3px; background: #A8976F; box-shadow: inset 0 2px 0 #8A7A55; display: block; }
+  .lip { position: absolute; left: 18px; right: 18px; bottom: 10px; height: 8px; border-radius: 4px; background: #D3C49F; box-shadow: inset 0 2px 0 #C2B28B; }
+  .kb { background: #CDBE98; padding: 8px; border-radius: 6px; box-shadow: inset 0 3px 0 #B8A77F; }
+  .case-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 8px; color: #8A7A5A; }
+  .badge { display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px 5px 5px; background: #2A2018; border-radius: 6px; box-shadow: inset 0 0 0 2px #8A7A55, 0 2px 0 #B8A77F; }
+  .badge-plate { display: flex; flex-direction: column; gap: 3px; }
+  .badge-name { font-size: 11px; line-height: 11px; font-style: italic; color: #F2E8D0; letter-spacing: 0.02em; }
+  .badge-sub { font-size: 5px; line-height: 5px; color: #D9B880; letter-spacing: 0.08em; }
+  .led { display: inline-flex; align-items: center; gap: 6px; }
+  .led i { width: 8px; height: 8px; background: #D23A2A; box-shadow: 0 0 6px #FF5A40; display: inline-block; }
+  .stripes { display: flex; gap: 3px; }
+  .stripes b { width: 18px; height: 4px; display: block; }
+  .kb { display: flex; gap: 10px; }
+  .kb-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .kb-row { display: flex; gap: 4px; }
+  .kb-f { width: 52px; display: flex; flex-direction: column; gap: 8px; padding-top: 22px; }
+  .key, .kgap { flex: var(--u, 1) 1 0; min-width: 0; height: 38px; }
+  .key { position: relative; min-height: 0; padding: 0 2px; display: flex; align-items: center; justify-content: center; text-align: center;
+         background: linear-gradient(#5E4A3A, #45362A); color: #F2E8D0; border-radius: 3px; font-size: 9px; line-height: 9px; white-space: pre;
+         box-shadow: 0 3px 0 #2A2018; cursor: default; user-select: none; overflow: hidden; }
+  .key.small { font-size: 6px; line-height: 8px; }
+  .key.f { background: linear-gradient(#E8B474, #D49A55); color: #4A3220; flex: none; height: 40px; width: 100%; font-size: 8px; }
+  .key.space { font-size: 8px; }
+  .key.live { cursor: pointer; background: linear-gradient(#4C45D8, #3A33C8); color: #FFFFFF; box-shadow: 0 3px 0 #1E1880, 0 0 0 2px #8FE3E8; font-size: 12px; }
+  .key.live .arr { position: absolute; bottom: 3px; left: 0; right: 0; font-size: 7px; line-height: 7px; color: #CFF6F8; }
+  .key.down { transform: translateY(3px); box-shadow: 0 0 0 #2A2018, 0 0 0 2px #8FE3E8; }
+  #autoBtn { display: inline-flex; align-items: center; gap: 10px; padding: 0 14px 0 6px; }
+  #autoBtn .akey { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; background: #F2E8D0; color: #3A33C8; box-shadow: 0 3px 0 #B8A77F; font-size: 14px; }
+  #autoBtn.on { background: #FFFFFF; color: #3A33C8; box-shadow: inset 0 0 0 4px #3A33C8; }
+  #autoBtn.on .akey { background: #3A33C8; color: #FFFFFF; box-shadow: none; }
+  .kb-caption { margin-top: 40px; padding: 10px 12px; background: #FFFFFF; color: #2A2390; border: 2px solid var(--ink); font-size: 10px; line-height: 14px; text-align: center; }
+  .hints { white-space: pre; font-size: 10px; line-height: 14px; display: flex; flex-direction: column; gap: 8px; }
+  @keyframes blink { 0%,49% { opacity: 1 } 50%,100% { opacity: 0 } }
+  .cursor { display: inline-block; width: 12px; height: 14px; background: var(--ink); animation: blink 1s steps(1) infinite; }
+</style>
+</head>
+<body>
+<main class="screen">
+  <div class="boot">
+    <div class="c">**** RETRO SNAKE BASIC ****</div>
+    <div><span id="bootBytes">3580</span> BYTES FREE</div>
+    <div>READY.</div>
+  </div>
+  <div class="row">
+    <div class="board">
+      <canvas id="cv" width="400" height="400" aria-label="Game board"></canvas>
+      <div class="overlay" id="overlay">
+        <div class="box">
+          <div id="kicker">LOAD "RETRO SNAKE",8</div>
+          <div class="t" id="title">READY.</div>
+          <button id="primary">RUN</button>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <h1>RETRO SNAKE</h1>
+      <div class="stats">
+        <div>SCORE      <span id="score">0000</span></div>
+        <div>HI         <span id="best">0000</span></div>
+        <div>BYTES FREE <span id="bytes">3580</span></div>
+      </div>
+      <div class="radar">
+        <div>RADAR</div>
+        <canvas id="radar" width="120" height="120" aria-label="Radar map: you, cheese and cats"></canvas>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap">
+        <button id="music">MUSIC ON</button>
+        <button id="autoBtn" aria-label="Auto mode: the computer plays for one minute"><span class="akey">A</span>AUTO 1 MIN</button>
+      </div>
+      <div class="hints"><div>EAT CHEESE.</div><div>DODGE THE CATS.</div></div>
+      <div><span id="status">PRESS RETURN</span> <span class="cursor"></span></div>
+    </div>
+  </div>
+  <div class="computer">
+    <div class="case">
+      <div class="ridge" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="lip" aria-hidden="true"></div>
+      <div class="case-top">
+        <span class="led"><i></i>POWER</span>
+        <span class="stripes" aria-hidden="true"><b style="background:#3A33C8"></b><b style="background:#B53A2E"></b><b style="background:#D9A400"></b></span>
+        <span class="badge" aria-label="Retro Snake">
+          <svg class="badge-icon" width="30" height="30" viewBox="0 0 10 10" shape-rendering="crispEdges" aria-hidden="true">
+            <rect width="10" height="10" rx="1.5" fill="#2A2018"/>
+            <g fill="#7ED957"><rect x="2" y="2" width="6" height="1"/><rect x="2" y="3" width="1" height="2"/><rect x="2" y="4" width="5" height="1"/><rect x="6" y="5" width="1" height="2"/><rect x="2" y="6" width="5" height="1"/></g>
+            <rect x="7" y="2" width="1" height="1" fill="#F2E8D0"/><rect x="2" y="7" width="1" height="1" fill="#B53A2E"/>
+          </svg>
+          <span class="badge-plate">
+            <span class="badge-name">RETRO SNAKE</span>
+            <span class="badge-sub">PERSONAL GAME COMPUTER</span>
+          </span>
+        </span>
+      </div>
+      <div class="kb">
+        <div class="kb-main" id="kbMain"></div>
+        <div class="kb-f" aria-hidden="true">
+          <div class="key f">f1</div><div class="key f">f3</div><div class="key f">f5</div><div class="key f">f7</div>
+        </div>
+      </div>
+    </div>
+    <div class="kb-caption">CLICK OR PRESS W A S D TO STEER (ARROW KEYS WORK TOO) · SPACE PAUSE · RETURN RUN · M MUSIC · A-BUTTON AUTO</div>
+  </div>
+</main>
+<script>
+(function () {
+  'use strict';
+
+  // ---------- Settings ----------
+  var N = 20;              // 20 x 20 grid
+  var CELL = 20;           // canvas px per cell
+  var PX = 4;              // one "VIC pixel" = 4 canvas px (5x5 per cell)
+  var SPEED = 130;         // ms per step at start
+  var MEMORY = 3583;       // bytes free = 3583 - length
+
+  // VIC-20-ish palette
+  var C = { ink: '#3A33C8', red: '#B53A2E', purple: '#8A2FA8', yellow: '#D9A400', white: '#FFFFFF', black: '#000000', pink: '#E07090' };
+
+  var DIRS = { U: [0, -1], D: [0, 1], L: [-1, 0], R: [1, 0] };
+  var OPP = { U: 'D', D: 'U', L: 'R', R: 'L' };
+  var KEYS = { arrowup: 'U', arrowdown: 'D', arrowleft: 'L', arrowright: 'R', w: 'U', s: 'D', a: 'L', d: 'R' };
+
+  // ---------- 5x5 sprites (drawn facing right) ----------
+  // X = main colour, E = eye (white), K = pupil/dark, N = nose, O = hole/white
+  var SPR = {
+    ratHead: ['X....', 'XXXX.', 'XEXXX', 'XXXXN', 'XXX..'],
+    ratBody: ['.XXX.', 'XXXXX', 'XXXXX', 'XXXXX', '.XXX.'],
+    ratTail: ['.....', 'X....', '.XXXX', '.....', '.....'],
+    cheese:  ['....X', '..XXX', '.XOXX', 'XXXXO', 'XXXXX'],
+    cat:     ['X...X', 'XXXXX', 'EXXXE', 'XXNXX', '.XXX.'],
+    catBlink:['X...X', 'XXXXX', 'XXXXX', 'XXNXX', '.XXX.']
+  };
+
+  var cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  var $ = function (id) { return document.getElementById(id); };
+  var pad4 = function (n) { return String(n).padStart(4, '0'); };
+
+  // Map a drawn pixel (x,y) to the right-facing source pixel for a direction
+  function src(dir, x, y) {
+    if (dir === 'L') return [4 - x, y];
+    if (dir === 'U') return [4 - y, x];
+    if (dir === 'D') return [y, 4 - x];
+    return [x, y];
+  }
+  function drawSprite(rows, cx, cy, dir, colours) {
+    for (var y = 0; y < 5; y++) for (var x = 0; x < 5; x++) {
+      var s = src(dir || 'R', x, y);
+      var ch = rows[s[1]][s[0]];
+      if (ch === '.') continue;
+      ctx.fillStyle = colours[ch] || colours.X;
+      ctx.fillRect(cx * CELL + x * PX, cy * CELL + y * PX, PX, PX);
+    }
+  }
+  // Direction from cell a toward neighbouring cell b (handles nothing fancy: no wrap)
+  function dirTo(a, b) {
+    var dx = b[0] - a[0], dy = b[1] - a[1];
+    if (dx === 1) return 'R'; if (dx === -1) return 'L';
+    if (dy === 1) return 'D'; return 'U';
+  }
+
+  // ---------- Game state ----------
+  var snake, dir, queue, food, cats, catTick, score, best = 0, status = 'ready', timer = null, frame = 0;
+
+  function same(a, b) { return a && b && a[0] === b[0] && a[1] === b[1]; }
+  function onSnake(p, from) { for (var i = from || 0; i < snake.length; i++) if (same(snake[i], p)) return true; return false; }
+  function onCat(p, except) { return cats.some(function (c) { return c !== except && same(c.p, p); }); }
+  function dist(a, b) { return Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]); }
+
+  function reset() {
+    snake = [[7, 10], [6, 10], [5, 10]];
+    dir = 'R'; queue = []; score = 0; catTick = 0;
+    cats = [{ p: [17, 2] }, { p: [2, 17] }];
+    food = [14, 10];
+  }
+  function placeFood() {
+    var free = [];
+    for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) {
+      var p = [x, y];
+      if (!onSnake(p) && !onCat(p)) free.push(p);
+    }
+    return free.length ? free[Math.floor(Math.random() * free.length)] : null;
+  }
+  function bytesFree() { return MEMORY - snake.length; }
+
+  // Chasers step one cell toward the rat's head, with some random wandering.
+  // They can't walk through the rat's body or each other.
+  function chase(pos, wander, isBlocked) {
+    var head = snake[0], opts = [];
+    ['U', 'D', 'L', 'R'].forEach(function (d) {
+      var p = [pos[0] + DIRS[d][0], pos[1] + DIRS[d][1]];
+      if (p[0] < 0 || p[1] < 0 || p[0] >= N || p[1] >= N) return;
+      if (onSnake(p, 1) || isBlocked(p)) return;
+      opts.push(p);
+    });
+    if (!opts.length) return pos;
+    if (Math.random() < wander) return opts[Math.floor(Math.random() * opts.length)];
+    opts.sort(function (a, b) { return dist(a, head) - dist(b, head); });
+    return opts[0];
+  }
+
+  // Black cats amble toward the rat's head. More cats join as you score (up to 4).
+  function catEvery() { return Math.max(3, 5 - Math.floor(score / 8)); }
+  function catsWanted() { return Math.min(4, 2 + Math.floor(score / 10)); }
+  function moveCats() {
+    cats.forEach(function (c) {
+      c.p = chase(c.p, 0.3, function (p) { return onCat(p, c); });
+    });
+  }
+  function spawnCat() {
+    var corners = [[0, 0], [19, 0], [0, 19], [19, 19]].filter(function (c) {
+      return !onSnake(c) && !onCat(c) && !same(c, food);
+    });
+    if (!corners.length) return;
+    corners.sort(function (a, b) { return dist(b, snake[0]) - dist(a, snake[0]); });
+    cats.push({ p: corners[0] });
+  }
+  function caught() { return onCat(snake[0]) ? '?CAT ERROR' : null; }
+
+  // ---------- Drawing ----------
+  function draw() {
+    ctx.fillStyle = C.white; ctx.fillRect(0, 0, 400, 400);
+    if (food) drawSprite(SPR.cheese, food[0], food[1], 'R', { X: C.yellow, O: C.white });
+
+    for (var i = snake.length - 1; i >= 0; i--) {
+      var p = snake[i];
+      if (i === 0) drawSprite(SPR.ratHead, p[0], p[1], dir, { X: C.ink, E: C.white, N: C.pink });
+      else if (i === snake.length - 1) drawSprite(SPR.ratTail, p[0], p[1], dirTo(p, snake[i - 1]), { X: C.ink });
+      else drawSprite(SPR.ratBody, p[0], p[1], 'R', { X: C.ink });
+    }
+
+    cats.forEach(function (c, i) {
+      var blink = ((frame + i * 5) % 12) === 0;
+      drawSprite(blink ? SPR.catBlink : SPR.cat, c.p[0], c.p[1], 'R', { X: C.black, E: C.yellow, N: C.pink });
+    });
+
+    drawRadar();
+
+    $('score').textContent = pad4(score);
+    $('best').textContent = pad4(Math.max(best, score));
+    $('bytes').textContent = bytesFree();
+    $('bootBytes').textContent = bytesFree();
+  }
+
+  // Radar: turquoise = you, white = cheese, purple crosses = cats.
+  var rctx = $('radar').getContext('2d'), R = 6;
+  function drawRadar() {
+    rctx.fillStyle = '#000'; rctx.fillRect(0, 0, 120, 120);
+    if (food) { rctx.fillStyle = '#FFFFFF'; rctx.fillRect(food[0] * R + 1, food[1] * R + 1, 4, 4); }
+    rctx.fillStyle = '#2E8F88';
+    for (var i = 1; i < snake.length; i++) rctx.fillRect(snake[i][0] * R + 1, snake[i][1] * R + 1, 4, 4);
+    rctx.fillStyle = '#4FE3D6';
+    rctx.fillRect(snake[0][0] * R, snake[0][1] * R, 6, 6);
+    rctx.fillStyle = '#C060E0';
+    cats.forEach(function (c) {
+      var x = c.p[0] * R, y = c.p[1] * R;
+      rctx.fillRect(x + 2, y, 2, 6); rctx.fillRect(x, y + 2, 6, 2);
+    });
+  }
+
+  function setStatus(s, reason) {
+    status = s;
+    var o = {
+      ready:  ['LOAD "RETRO SNAKE",8', 'READY.', 'RUN'],
+      paused: ['BREAK IN 10', 'PAUSED', 'CONT'],
+      over:   ['SCORE ' + pad4(score), reason || '?CRASH ERROR', 'RUN'],
+      won:    ['0 BYTES FREE', 'YOU WIN', 'RUN']
+    }[s];
+    $('overlay').hidden = s === 'playing';
+    if (o) { $('kicker').textContent = o[0]; $('title').textContent = o[1]; $('primary').textContent = o[2]; }
+    $('status').textContent = { ready: 'PRESS RETURN', playing: autoLeft > 0 ? 'AUTO PILOT' : 'RUNNING', paused: 'BREAK', over: reason || '?CRASH ERROR', won: 'BOARD FULL' }[s];
+  }
+
+  // ---------- Loop ----------
+  function loop() {
+    clearTimeout(timer);
+    var wait = Math.max(60, SPEED - score * 2);
+    timer = setTimeout(function () {
+      if (status !== 'playing') return;
+      if (autoLeft > 0) {
+        autoLeft -= wait;
+        if (autoLeft <= 0) {
+          // Minute's up: pause so you can take over
+          stopAuto(); pause();
+          $('kicker').textContent = 'AUTO MINUTE OVER'; $('title').textContent = 'YOUR TURN';
+          return;
+        }
+        showAuto();
+      }
+      tick();
+      if (status === 'playing') loop();
+    }, wait);
+  }
+
+  // ---------- Auto mode: the computer steers for one minute ----------
+  var autoLeft = 0; // ms of auto play remaining (counts game time, so pausing pauses it)
+  function inBounds(p) { return p[0] >= 0 && p[1] >= 0 && p[0] < N && p[1] < N; }
+  function nearCat(p) { return cats.some(function (c) { return dist(c.p, p) <= 1; }); }
+  function aiDir() {
+    var head = snake[0], key = function (p) { return p[0] + ',' + p[1]; };
+    var body = {}; for (var i = 0; i < snake.length - 1; i++) body[key(snake[i])] = true; // tail moves away
+    var hard = function (p) { return !inBounds(p) || body[key(p)] || onCat(p); };
+    var catNear = function (p, r) { return cats.some(function (c) { return dist(c.p, p) <= r; }); };
+    var D4 = ['U', 'D', 'L', 'R'];
+    function step(p, d) { return [p[0] + DIRS[d][0], p[1] + DIRS[d][1]]; }
+    // How much open space is reachable from p (capped)
+    function room(p, cap) {
+      var n = 0, s2 = {}, st = [p]; s2[key(p)] = true;
+      while (st.length && n < cap) {
+        var c = st.pop(); n++;
+        D4.forEach(function (e) { var r = step(c, e); if (!s2[key(r)] && !hard(r)) { s2[key(r)] = true; st.push(r); } });
+      }
+      return n;
+    }
+    // Shortest path to the cheese keeping r cells away from cats; only if the first step leaves enough room
+    function toFood(r) {
+      var seen = {}, q = [];
+      seen[key(head)] = true;
+      D4.forEach(function (d) {
+        var p = step(head, d);
+        if (hard(p) || catNear(p, r) || room(p, snake.length + 4) < snake.length + 4) return;
+        seen[key(p)] = true; q.push({ p: p, first: d });
+      });
+      while (q.length) {
+        var n = q.shift();
+        if (same(n.p, food)) return n.first;
+        D4.forEach(function (d) {
+          var p = step(n.p, d);
+          if (seen[key(p)] || hard(p) || catNear(p, r)) return;
+          seen[key(p)] = true; q.push({ p: p, first: n.first });
+        });
+      }
+      return null;
+    }
+    var d = toFood(2) || toFood(1);
+    if (d) return d;
+    // No safe path: go where there is the most space, as far from cats as possible
+    var best = null, bestScore = -1e9;
+    D4.forEach(function (e) {
+      var p = step(head, e);
+      if (hard(p)) return;
+      var near = cats.reduce(function (m, c) { return Math.min(m, dist(c.p, p)); }, 99);
+      var sc = room(p, 200) + Math.min(near, 6) * 8 - (near <= 1 ? 1000 : 0);
+      if (sc > bestScore) { bestScore = sc; best = e; }
+    });
+    return best || dir;
+  }
+  function showAuto() {
+    var b = $('autoBtn');
+    if (autoLeft > 0) {
+      var secs = Math.ceil(autoLeft / 1000);
+      b.classList.add('on');
+      b.lastChild.textContent = 'AUTO 0:' + String(secs).padStart(2, '0');
+    } else {
+      b.classList.remove('on');
+      b.lastChild.textContent = 'AUTO 1 MIN';
+    }
+  }
+  function startAuto() {
+    startAudio();
+    if (status !== 'playing' && status !== 'paused') start();
+    else if (status === 'paused') resume();
+    autoLeft = 60000; queue = [];
+    showAuto(); setStatus('playing');
+  }
+  function stopAuto() { autoLeft = 0; showAuto(); if (status === 'playing') setStatus('playing'); }
+
+  function tick() {
+    frame++;
+    if (autoLeft > 0) { queue = []; dir = aiDir(); }
+    else if (queue.length) dir = queue.shift();
+    var h = [snake[0][0] + DIRS[dir][0], snake[0][1] + DIRS[dir][1]];
+    if (h[0] < 0 || h[1] < 0 || h[0] >= N || h[1] >= N) return end('?WALL ERROR');
+    var ate = same(h, food);
+    var body = ate ? snake : snake.slice(0, -1);
+    for (var i = 0; i < body.length; i++) if (same(body[i], h)) return end('?BITE ERROR');
+    snake = [h].concat(body);
+    var why = caught();
+    if (why) return end(why);
+    if (ate) {
+      score++; sfxEat();
+      if (cats.length < catsWanted()) spawnCat();
+      food = placeFood();
+    }
+
+    catTick++;
+    if (catTick >= catEvery()) { catTick = 0; moveCats(); }
+    why = caught();
+    if (why) return end(why);
+
+    draw();
+    if (!food) end(null, true);
+  }
+
+  function end(reason, won) {
+    clearTimeout(timer);
+    if (autoLeft > 0 && !won) {
+      // Auto mode keeps playing for the full minute: show the crash, then start a fresh rat
+      best = Math.max(best, score);
+      sfxCrash(); draw();
+      $('status').textContent = reason + ' (AUTO RESTART)';
+      var left = autoLeft;
+      timer = setTimeout(function () {
+        if (autoLeft <= 0) return;
+        reset(); autoLeft = left; draw(); setStatus('playing'); loop();
+      }, 1200);
+      return;
+    }
+    autoLeft = 0; showAuto();
+    best = Math.max(best, score);
+    if (!won) sfxCrash();
+    draw();
+    setStatus(won ? 'won' : 'over', reason);
+  }
+  function start() { autoLeft = 0; showAuto(); startAudio(); reset(); draw(); setStatus('playing'); loop(); }
+  function pause() { if (status === 'playing') { clearTimeout(timer); setStatus('paused'); } }
+  function resume() { if (status === 'paused') { setStatus('playing'); loop(); } }
+  function toggle() { status === 'playing' ? pause() : status === 'paused' ? resume() : start(); }
+  function steer(d) {
+    if (autoLeft > 0) stopAuto(); // you take back control
+    if (status === 'ready' || status === 'over' || status === 'won') start();
+    else if (status === 'paused') resume();
+    // No reversing into yourself: compare against the last queued direction.
+    var last = queue.length ? queue[queue.length - 1] : dir;
+    if (d !== last && d !== OPP[last] && queue.length < 3) queue.push(d);
+  }
+
+  // ---------- Sound: "Three Blind Mice" on VIC-style square waves ----------
+  // The traditional nursery rhyme (public domain), in its usual 6/8 rhythm, key of C.
+  // Each entry is [MIDI note, length in eighth notes].
+  var actx = null, master = null, musicOn = true, nextTime = 0, step = 0;
+  var STEP = 0.16; // seconds per eighth note
+  var E4 = 64, D4 = 62, C4 = 60, G4 = 67, F4 = 65, A4 = 69, B4 = 71, C5 = 72;
+  var SONG = [
+    [E4, 3], [D4, 3], [C4, 6],                                       // Three blind mice
+    [E4, 3], [D4, 3], [C4, 6],                                       // Three blind mice
+    [G4, 3], [F4, 2], [F4, 1], [E4, 6],                              // See how they run
+    [G4, 3], [F4, 2], [F4, 1], [E4, 5],                              // See how they run
+    [G4, 1], [C5, 2], [C5, 1], [B4, 1], [A4, 1], [B4, 1], [C5, 2], [G4, 1], [G4, 2],   // They all ran after the farmer's wife
+    [G4, 1], [C5, 2], [C5, 1], [B4, 1], [A4, 1], [B4, 1], [C5, 2], [G4, 1], [G4, 2],   // She cut off their tails with a carving knife
+    [G4, 1], [C5, 1], [C5, 1], [C5, 1], [B4, 1], [A4, 1], [B4, 1], [C5, 2], [G4, 1], [G4, 2], // Did you ever see such a thing in your life
+    [F4, 1], [E4, 3], [D4, 3], [C4, 6]                               // As three blind mice
+  ];
+  // Flatten to an eighth-note grid: MEL[i] = note starting on step i (or null), LEN[i] = its length, HELD[i] = note sounding.
+  var MEL = [], LEN = [], HELD = [];
+  SONG.forEach(function (n) {
+    for (var k = 0; k < n[1]; k++) { MEL.push(k === 0 ? n[0] : null); LEN.push(k === 0 ? n[1] : 0); HELD.push(n[0]); }
+  });
+  var LOOP = MEL.length;
+  function hz(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+  function blip(freq, t, dur, vol, type) {
+    var o = actx.createOscillator(), g = actx.createGain();
+    o.type = type || 'square'; o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.setValueAtTime(vol, t + dur * 0.7);
+    g.gain.linearRampToValueAtTime(0, t + dur);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  // Fourth voice: the VIC chip's noise channel, used here as hi-hat and snare.
+  var noiseBuf = null;
+  function noise(t, dur, vol, filterType, freq) {
+    if (!noiseBuf) {
+      noiseBuf = actx.createBuffer(1, Math.floor(actx.sampleRate * 0.3), actx.sampleRate);
+      var d = noiseBuf.getChannelData(0);
+      for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    var s = actx.createBufferSource(), f = actx.createBiquadFilter(), g = actx.createGain();
+    s.buffer = noiseBuf; f.type = filterType; f.frequency.value = freq;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    s.connect(f); f.connect(g); g.connect(master);
+    s.start(t); s.stop(t + dur + 0.02);
+  }
+  function schedule() {
+    while (nextTime < actx.currentTime + 0.12) {
+      // Tune: loud and clear on top
+      if (MEL[step] != null) blip(hz(MEL[step]), nextTime, STEP * LEN[step] * 0.9, 0.55);
+      // Soft bass on each beat (every 3 eighths in 6/8): C, or G under G/F/B/D notes
+      if (step % 3 === 0) {
+        var h = HELD[step] % 12, root = (h === 7 || h === 5 || h === 11 || h === 2) ? 43 : 48;
+        blip(hz(root), nextTime, STEP * 2.5, 0.25);
+      }
+      // Noise channel: light tick on each beat
+      if (step % 3 === 0) noise(nextTime, 0.03, 0.15, 'highpass', 7000);
+      nextTime += STEP; step = (step + 1) % LOOP;
+    }
+  }
+  function startAudio() {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!actx) {
+      actx = new AC();
+      master = actx.createGain(); master.gain.value = musicOn ? 0.12 : 0; master.connect(actx.destination);
+      nextTime = actx.currentTime + 0.05;
+      setInterval(schedule, 25);
+    } else if (actx.state === 'suspended') actx.resume();
+  }
+  function setMusic(on) {
+    musicOn = on;
+    if (master) master.gain.value = on ? 0.12 : 0;
+    $('music').textContent = on ? 'MUSIC ON' : 'MUSIC OFF';
+  }
+  function sfxEat() { if (actx && musicOn) { var t = actx.currentTime; blip(hz(84), t, 0.05, 0.6); blip(hz(91), t + 0.05, 0.06, 0.6); } }
+  function sfxCrash() {
+    if (!actx || !musicOn) return;
+    var t = actx.currentTime;
+    for (var i = 0; i < 6; i++) blip(hz(60 - i * 3), t + i * 0.06, 0.06, 0.7);
+  }
+
+  // ---------- On-screen keyboard ----------
+  // [label, width in key units, live action]. Live keys are clickable buttons; the rest are decoration.
+  var KB = [
+    [['←'], ['1'], ['2'], ['3'], ['4'], ['5'], ['6'], ['7'], ['8'], ['9'], ['0'], ['+'], ['−'], ['£'], ['CLR\nHOME'], ['INST\nDEL']],
+    [['CTRL', 1.5], ['Q'], ['W', 1, 'U'], ['E'], ['R'], ['T'], ['Y'], ['U'], ['I'], ['O'], ['P'], ['@'], ['*'], ['↑'], ['RESTORE', 1.5]],
+    [['RUN\nSTOP'], ['SHIFT\nLOCK'], ['A', 1, 'L'], ['S', 1, 'D'], ['D', 1, 'R'], ['F'], ['G'], ['H'], ['J'], ['K'], ['L'], [':'], [';'], ['='], ['RETURN', 2, 'run']],
+    [[' '], ['SHIFT', 1.5], ['Z'], ['X'], ['C'], ['V'], ['B'], ['N'], ['M', 1, 'music'], [','], ['.'], ['/'], ['SHIFT', 1.5], ['CRSR\n⇕'], ['CRSR\n⇔']],
+    [[null, 3], ['SPACE', 9, 'pause'], [null, 4]]
+  ];
+  var ARROW = { U: '↑', L: '←', D: '↓', R: '→' };
+  var LABEL = { U: 'Steer up', L: 'Steer left', D: 'Steer down', R: 'Steer right', run: 'Run / restart', pause: 'Pause', music: 'Music on or off' };
+  var keyEl = {};
+  KB.forEach(function (row) {
+    var r = document.createElement('div'); r.className = 'kb-row';
+    row.forEach(function (k) {
+      var el;
+      if (k[0] === null) { el = document.createElement('div'); el.className = 'kgap'; }
+      else if (k[2]) {
+        el = document.createElement('button'); el.className = 'key live';
+        el.setAttribute('aria-label', k[0].replace('\n', ' ') + ': ' + LABEL[k[2]]);
+        el.textContent = k[0];
+        if (ARROW[k[2]]) { var a = document.createElement('span'); a.className = 'arr'; a.textContent = ARROW[k[2]]; el.appendChild(a); }
+        (function (act) {
+          el.addEventListener('click', function () {
+            startAudio();
+            if (DIRS[act]) steer(act);
+            else if (act === 'pause') toggle();
+            else if (act === 'run') start();
+            else if (act === 'music') setMusic(!musicOn);
+          });
+        })(k[2]);
+        keyEl[k[2]] = el;
+      } else {
+        el = document.createElement('div');
+        el.className = 'key' + (k[0].length > 2 ? ' small' : '') + (k[0] === 'SPACE' ? ' space' : '');
+        el.setAttribute('aria-hidden', 'true');
+        el.textContent = k[0];
+      }
+      el.style.setProperty('--u', k[1] || 1);
+      r.appendChild(el);
+    });
+    $('kbMain').appendChild(r);
+  });
+  function flash(act) {
+    var el = keyEl[act]; if (!el) return;
+    el.classList.add('down');
+    setTimeout(function () { el.classList.remove('down'); }, 120);
+  }
+
+  // ---------- Input ----------
+  document.addEventListener('keydown', function (e) {
+    var k = KEYS[e.key.toLowerCase()];
+    if (k) { e.preventDefault(); flash(k); startAudio(); steer(k); }
+    else if (e.key === ' ' || e.key === 'p' || e.key === 'P') { e.preventDefault(); flash('pause'); startAudio(); toggle(); }
+    else if (e.key === 'Enter') { e.preventDefault(); flash('run'); start(); }
+    else if (e.key === 'm' || e.key === 'M') { flash('music'); startAudio(); setMusic(!musicOn); }
+  });
+  $('primary').addEventListener('click', function () { status === 'paused' ? resume() : start(); });
+  $('music').addEventListener('click', function () { startAudio(); setMusic(!musicOn); });
+  $('autoBtn').addEventListener('click', function () { autoLeft > 0 ? stopAuto() : startAuto(); });
+
+  reset(); draw(); setStatus('ready');
+})();
+</script>
+</body>
+</html>
