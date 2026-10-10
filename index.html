@@ -97,7 +97,7 @@
         <div>BYTES FREE <span id="bytes">3580</span></div>
       </div>
       <div class="radar">
-        <div>RADAR</div>
+        <div>RADAR · WHOLE MAP</div>
         <canvas id="radar" width="120" height="120" aria-label="Radar map: you, cheese and cats"></canvas>
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap">
@@ -142,7 +142,9 @@
   'use strict';
 
   // ---------- Settings ----------
-  var N = 20;              // 20 x 20 grid
+  var N = 40;              // the world is 40 x 40 cells
+  var VIEW = 20;           // the screen shows a 20 x 20 window that follows the rat
+  var CHEESES = 3;         // pieces of cheese in the world at once
   var CELL = 20;           // canvas px per cell
   var PX = 4;              // one "VIC pixel" = 4 canvas px (5x5 per cell)
   var SPEED = 130;         // ms per step at start
@@ -183,7 +185,7 @@
       var ch = rows[s[1]][s[0]];
       if (ch === '.') continue;
       ctx.fillStyle = colours[ch] || colours.X;
-      ctx.fillRect(cx * CELL + x * PX, cy * CELL + y * PX, PX, PX);
+      ctx.fillRect((cx - camX) * CELL + x * PX, (cy - camY) * CELL + y * PX, PX, PX);
     }
   }
   // Direction from cell a toward neighbouring cell b (handles nothing fancy: no wrap)
@@ -194,24 +196,26 @@
   }
 
   // ---------- Game state ----------
-  var snake, dir, queue, food, cats, catTick, score, best = 0, status = 'ready', timer = null, frame = 0;
+  var snake, dir, queue, foods, cats, camX = 0, camY = 0, catTick, score, best = 0, status = 'ready', timer = null, frame = 0;
 
   function same(a, b) { return a && b && a[0] === b[0] && a[1] === b[1]; }
   function onSnake(p, from) { for (var i = from || 0; i < snake.length; i++) if (same(snake[i], p)) return true; return false; }
+  function onFood(p) { return foods.some(function (f) { return same(f, p); }); }
   function onCat(p, except) { return cats.some(function (c) { return c !== except && same(c.p, p); }); }
   function dist(a, b) { return Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]); }
 
   function reset() {
-    snake = [[7, 10], [6, 10], [5, 10]];
+    snake = [[20, 20], [19, 20], [18, 20]];
     dir = 'R'; queue = []; score = 0; catTick = 0;
-    cats = [{ p: [17, 2] }, { p: [2, 17] }];
-    food = [14, 10];
+    cats = [{ p: [N - 4, 4] }, { p: [4, N - 4] }];
+    foods = [];
+    for (var f = 0; f < CHEESES; f++) { var nf = placeFood(); if (nf) foods.push(nf); }
   }
   function placeFood() {
     var free = [];
     for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) {
       var p = [x, y];
-      if (!onSnake(p) && !onCat(p)) free.push(p);
+      if (!onSnake(p) && !onCat(p) && !onFood(p)) free.push(p);
     }
     return free.length ? free[Math.floor(Math.random() * free.length)] : null;
   }
@@ -242,8 +246,8 @@
     });
   }
   function spawnCat() {
-    var corners = [[0, 0], [19, 0], [0, 19], [19, 19]].filter(function (c) {
-      return !onSnake(c) && !onCat(c) && !same(c, food);
+    var corners = [[0, 0], [N - 1, 0], [0, N - 1], [N - 1, N - 1]].filter(function (c) {
+      return !onSnake(c) && !onCat(c) && !onFood(c);
     });
     if (!corners.length) return;
     corners.sort(function (a, b) { return dist(b, snake[0]) - dist(a, snake[0]); });
@@ -253,8 +257,21 @@
 
   // ---------- Drawing ----------
   function draw() {
+    // Camera: a 20 x 20 window centred on the rat's head, kept inside the world
+    camX = Math.max(0, Math.min(N - VIEW, snake[0][0] - VIEW / 2));
+    camY = Math.max(0, Math.min(N - VIEW, snake[0][1] - VIEW / 2));
     ctx.fillStyle = C.white; ctx.fillRect(0, 0, 400, 400);
-    if (food) drawSprite(SPR.cheese, food[0], food[1], 'R', { X: C.yellow, O: C.white });
+    // Floor dots fixed to the world, so you can see the screen scroll
+    ctx.fillStyle = '#D8D6F2';
+    for (var gy = camY; gy < camY + VIEW; gy++) for (var gx = camX; gx < camX + VIEW; gx++)
+      if (gx % 2 === 0 && gy % 2 === 0) ctx.fillRect((gx - camX) * CELL + 9, (gy - camY) * CELL + 9, 2, 2);
+    // Red walls where the screen reaches the edge of the world
+    ctx.fillStyle = C.red;
+    if (camX === 0) ctx.fillRect(0, 0, 4, 400);
+    if (camY === 0) ctx.fillRect(0, 0, 400, 4);
+    if (camX === N - VIEW) ctx.fillRect(396, 0, 4, 400);
+    if (camY === N - VIEW) ctx.fillRect(0, 396, 400, 4);
+    foods.forEach(function (f) { drawSprite(SPR.cheese, f[0], f[1], 'R', { X: C.yellow, O: C.white }); });
 
     for (var i = snake.length - 1; i >= 0; i--) {
       var p = snake[i];
@@ -277,18 +294,22 @@
   }
 
   // Radar: turquoise = you, white = cheese, purple crosses = cats.
-  var rctx = $('radar').getContext('2d'), R = 6;
+  // The radar shows the whole 40 x 40 world (3 px per cell); the outline is what's on screen.
+  var rctx = $('radar').getContext('2d'), R = 3;
   function drawRadar() {
     rctx.fillStyle = '#000'; rctx.fillRect(0, 0, 120, 120);
-    if (food) { rctx.fillStyle = '#FFFFFF'; rctx.fillRect(food[0] * R + 1, food[1] * R + 1, 4, 4); }
+    rctx.strokeStyle = '#3F4A8A'; rctx.lineWidth = 1;
+    rctx.strokeRect(camX * R + 0.5, camY * R + 0.5, VIEW * R - 1, VIEW * R - 1);
+    rctx.fillStyle = '#FFFFFF';
+    foods.forEach(function (f) { rctx.fillRect(f[0] * R - 1, f[1] * R - 1, 5, 5); });
     rctx.fillStyle = '#2E8F88';
-    for (var i = 1; i < snake.length; i++) rctx.fillRect(snake[i][0] * R + 1, snake[i][1] * R + 1, 4, 4);
+    for (var i = 1; i < snake.length; i++) rctx.fillRect(snake[i][0] * R, snake[i][1] * R, 3, 3);
     rctx.fillStyle = '#4FE3D6';
-    rctx.fillRect(snake[0][0] * R, snake[0][1] * R, 6, 6);
+    rctx.fillRect(snake[0][0] * R - 1, snake[0][1] * R - 1, 5, 5);
     rctx.fillStyle = '#C060E0';
     cats.forEach(function (c) {
-      var x = c.p[0] * R, y = c.p[1] * R;
-      rctx.fillRect(x + 2, y, 2, 6); rctx.fillRect(x, y + 2, 6, 2);
+      var x = c.p[0] * R + 1, y = c.p[1] * R + 1;
+      rctx.fillRect(x - 2, y, 5, 1); rctx.fillRect(x, y - 2, 1, 5);
     });
   }
 
@@ -357,7 +378,7 @@
       });
       while (q.length) {
         var n = q.shift();
-        if (same(n.p, food)) return n.first;
+        if (onFood(n.p)) return n.first;
         D4.forEach(function (d) {
           var p = step(n.p, d);
           if (seen[key(p)] || hard(p) || catNear(p, r)) return;
@@ -405,7 +426,7 @@
     else if (queue.length) dir = queue.shift();
     var h = [snake[0][0] + DIRS[dir][0], snake[0][1] + DIRS[dir][1]];
     if (h[0] < 0 || h[1] < 0 || h[0] >= N || h[1] >= N) return end('?WALL ERROR');
-    var ate = same(h, food);
+    var ate = onFood(h);
     var body = ate ? snake : snake.slice(0, -1);
     for (var i = 0; i < body.length; i++) if (same(body[i], h)) return end('?BITE ERROR');
     snake = [h].concat(body);
@@ -414,7 +435,8 @@
     if (ate) {
       score++; sfxEat();
       if (cats.length < catsWanted()) spawnCat();
-      food = placeFood();
+      foods = foods.filter(function (f) { return !same(f, h); });
+      var nf = placeFood(); if (nf) foods.push(nf);
     }
 
     catTick++;
@@ -423,7 +445,7 @@
     if (why) return end(why);
 
     draw();
-    if (!food) end(null, true);
+    if (!foods.length) end(null, true);
   }
 
   function end(reason, won) {
